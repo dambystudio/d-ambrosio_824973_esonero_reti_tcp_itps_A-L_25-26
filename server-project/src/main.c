@@ -25,8 +25,6 @@
 #include <time.h>
 #include "protocol.h"
 
-#define NO_ERROR 0
-
 // === FUNZIONI ===
 
 float get_temperature(void) {
