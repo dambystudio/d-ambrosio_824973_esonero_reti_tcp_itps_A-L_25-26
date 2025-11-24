@@ -143,77 +143,82 @@ int comunicazione(int clientSocket, struct sockaddr_in client_addr){
 }
 
 int main(int argc, char *argv[]) {
+    srand(time(NULL));
+    
+    // ✅ AGGIUNGI QUESTO: Parsing argomenti per la porta
+    int server_port = SERVER_PORT;  // Porta di default
+    
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-p") == 0 && i + 1 < argc) {
+            server_port = atoi(argv[i + 1]);
+            if (server_port < 1024 || server_port > 65535) {
+                printf("Errore: porta non valida (usa 1024-65535)\n");
+                return -1;
+            }
+            printf("Utilizzo porta: %d\n", server_port);
+            i++;
+        }
+    }
 
-	srand(time(NULL));
+#if defined WIN32
+    WSADATA wsa_data;
+    int result = WSAStartup(MAKEWORD(2,2), &wsa_data);
+    if (result != 0) {
+        printf("Errore nella funziona WSAStartup()\n");
+        return 0;
+    }
+#endif
 
-	#if defined WIN32
-		// Initialize Winsock
-		WSADATA wsa_data;
-		int result = WSAStartup(MAKEWORD(2,2), &wsa_data);
-		if (result != NO_ERROR) {
-			printf("Error at WSAStartup()\n");
-			return 0;
-		}
-	#endif
+    int socketServer;
+    socketServer = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (socketServer < 0) {
+        errorhandler("Creazione del socket fallita.\n");
+        clearwinsock();
+        return -1;
+    }
+    printf("Creazione socket eseguita.\n");
 
-	int socketServer;
-	socketServer = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
-	if (socketServer <0){
-		errorhandler("Creazione del socket fallita.\n");
-		closesocket(socketServer);
-		clearwinsock();
-		return -1;
-	}
-	else{
-		puts("Creazione socket eseguita.\n");
-	}
+    struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(server_port);  // ✅ USA server_port invece di SERVER_PORT
+    server_addr.sin_addr.s_addr = INADDR_ANY;
 
-	struct sockaddr_in server_addr;
-	memset(&server_addr, 0, sizeof(server_addr));
-	server_addr.sin_family = AF_INET;
-	server_addr.sin_port = htons(SERVER_PORT);
-	// server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-	server_addr.sin_addr.s_addr = INADDR_ANY;
+    if (bind(socketServer, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        errorhandler("Binding fallito.\n");
+        closesocket(socketServer);
+        clearwinsock();
+        return -1;
+    }
+    printf("Binding completato sulla porta %d.\n", server_port);  // ✅ Stampa la porta
 
-	if (bind(socketServer, (struct sockaddr*) &server_addr, sizeof(server_addr)) <0) {
-		errorhandler("Binding fallito.\n");
-		closesocket(socketServer);
-		clearwinsock();
-		return -1;
-	}else{
-		puts("Binding completato.\n");
-	}
+    if (listen(socketServer, QUEUE_SIZE) < 0) {
+        errorhandler("Ascolto fallito.\n");
+        closesocket(socketServer);
+        clearwinsock();
+        return -1;
+    }
+    printf("In attesa di client...\n");
 
-	if (listen (socketServer, QUEUE_SIZE) < 0) {
-		errorhandler("Ascolto fallito.\n");
-		closesocket(socketServer);
-		clearwinsock();
-		return -1;
-	}else{
-		puts("In attesa di un client.\n");
-	}
+    struct sockaddr_in cad;
+    int clientSocket;
+    int clientLen;
+    
+    while(1) {
+        printf("\nAspettando connessione client...\n");
+        clientLen = sizeof(cad);
+        
+        if ((clientSocket = accept(socketServer, (struct sockaddr*)&cad, &clientLen)) < 0) {
+            errorhandler("Accettazione fallita.\n");
+            continue;
+        }
 
-	struct sockaddr_in cad;
-	int clientSocket;
-	int clientLen;
-
-	while(1){
-		printf("Aspettando connessione client...\n");
-		clientLen = sizeof(cad);
-
-		if((clientSocket=accept(socketServer, (struct sockaddr*) &cad, &clientLen)) < 0){
-			errorhandler("Accettazione fallita.\n");
-			continue;
-		}
-
-		printf("Client connesso: %s\n", inet_ntoa(cad.sin_addr));
+        printf("Client connesso: %s\n", inet_ntoa(cad.sin_addr));
         
         comunicazione(clientSocket, cad);
- 	}
+    }
 
-	printf("Server terminated.\n");
-
-	closesocket(socketServer);
-	clearwinsock();
-	return 0;
-} // main end
+    closesocket(socketServer);
+    clearwinsock();
+    return 0;
+}
